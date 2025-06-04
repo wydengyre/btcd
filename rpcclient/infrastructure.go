@@ -261,6 +261,11 @@ func (c *Client) removeRequest(id uint64) *jsonRequest {
 func (c *Client) removeAllRequests() {
 	c.requestMap = make(map[uint64]*list.Element)
 	c.requestList.Init()
+	if c.batch {
+		c.batchLock.Lock()
+		c.batchList.Init()
+		c.batchLock.Unlock()
+	}
 }
 
 // trackRegisteredNtfns examines the passed command to see if it is one of
