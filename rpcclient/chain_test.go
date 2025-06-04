@@ -151,12 +151,16 @@ func TestClientConnectedToWSServerRunner(t *testing.T) {
 			TestCase: func(t *testing.T) {
 				client, serverReceivedChannel, cleanup := makeClient(t)
 				defer cleanup()
+
 				client.GetChainTxStatsAsync()
 
 				message := <-serverReceivedChannel
 				if message != "{\"jsonrpc\":\"1.0\",\"method\":\"getchaintxstats\",\"params\":[],\"id\":1}" {
 					t.Fatalf("received unexpected message: %s", message)
 				}
+
+				client.Shutdown()
+				client.WaitForShutdown()
 			},
 		},
 		TestTableItem{
@@ -165,31 +169,13 @@ func TestClientConnectedToWSServerRunner(t *testing.T) {
 				client, _, cleanup := makeClient(t)
 				defer cleanup()
 
-				// a bit of a hack here: since there are multiple places where we read
-				// from the shutdown channel, and it is not buffered, ensure that a shutdown
-				// message is sent every time it is read from, this will ensure that
-				// when client.GetChainTxStatsAsync() gets called, it hits the non-blocking
-				// read from the shutdown channel
-				go func() {
-					type shutdownMessage struct{}
-					for {
-						client.shutdown <- shutdownMessage{}
-					}
-				}()
-
-				var response *Response = nil
-
-				for response == nil {
-					respChan := client.GetChainTxStatsAsync()
-					select {
-					case response = <-respChan:
-					default:
-					}
-				}
-
+				client.Shutdown()
+				respChan := client.GetChainTxStatsAsync()
+				response := <-respChan
 				if response.err == nil || response.err.Error() != "the client has been shutdown" {
 					t.Fatalf("unexpected error: %s", response.err.Error())
 				}
+				client.WaitForShutdown()
 			},
 		},
 		TestTableItem{
@@ -232,6 +218,8 @@ func TestClientConnectedToWSServerRunner(t *testing.T) {
 				// ensure the goroutine created in this test exists,
 				// the test is ran with a timeout
 				wg.Wait()
+				client.Shutdown()
+				client.WaitForShutdown()
 			},
 		},
 	}
